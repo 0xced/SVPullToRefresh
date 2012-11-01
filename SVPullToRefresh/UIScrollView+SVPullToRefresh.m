@@ -304,7 +304,7 @@ static NSBundle *_localizationBundle = nil;
 }
 
 - (UILabel *)subtitleLabel {
-    if(!_subtitleLabel && self.showsDateLabel) {
+    if(!_subtitleLabel) {
         _subtitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 28, 220, 20)];
         _subtitleLabel.font = [UIFont systemFontOfSize:12];
         _subtitleLabel.backgroundColor = [UIColor clearColor];
@@ -319,7 +319,7 @@ static NSBundle *_localizationBundle = nil;
 }
 
 - (UILabel *)dateLabel {
-    return self.subtitleLabel;
+    return self.showsDateLabel ? self.subtitleLabel : nil;
 }
 
 - (UIScrollView *)scrollView {
