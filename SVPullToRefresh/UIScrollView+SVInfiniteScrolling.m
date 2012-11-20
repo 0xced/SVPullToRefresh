@@ -28,9 +28,10 @@ static CGFloat const SVInfiniteScrollingViewHeight = 60;
 @property (nonatomic, strong) UIActivityIndicatorView *activityIndicatorView;
 @property (nonatomic, readwrite) SVInfiniteScrollingState state;
 @property (nonatomic, strong) NSMutableArray *viewForState;
-@property (nonatomic, strong, readonly) UIScrollView *scrollView;
+@property (nonatomic, weak) UIScrollView *scrollView;
 @property (nonatomic, readwrite) CGFloat originalBottomInset;
 @property (nonatomic, assign) BOOL wasTriggeredByUser;
+@property (nonatomic, assign) BOOL isObserving;
 
 - (void)resetScrollViewContentInset;
 - (void)setScrollViewContentInsetForInfiniteScrolling;
@@ -55,6 +56,7 @@ UIEdgeInsets scrollViewOriginalContentInsets;
     if(!self.infiniteScrollingView) {
         SVInfiniteScrollingView *view = [[SVInfiniteScrollingView alloc] initWithFrame:CGRectMake(0, self.contentSize.height, self.bounds.size.width, SVInfiniteScrollingViewHeight)];
         view.infiniteScrollingHandler = actionHandler;
+        view.scrollView = self;
         [self addSubview:view];
         
         view.originalBottomInset = self.contentInset.bottom;
@@ -84,14 +86,20 @@ UIEdgeInsets scrollViewOriginalContentInsets;
     self.infiniteScrollingView.hidden = !showsInfiniteScrolling;
     
     if(!showsInfiniteScrolling) {
+      if (self.infiniteScrollingView.isObserving) {
         [self removeObserver:self.infiniteScrollingView forKeyPath:@"contentOffset"];
         [self removeObserver:self.infiniteScrollingView forKeyPath:@"contentSize"];
         [self.infiniteScrollingView resetScrollViewContentInset];
+        self.infiniteScrollingView.isObserving = NO;
+      }
     }
     else {
+      if (!self.infiniteScrollingView.isObserving) {
         [self addObserver:self.infiniteScrollingView forKeyPath:@"contentOffset" options:NSKeyValueObservingOptionNew context:nil];
         [self addObserver:self.infiniteScrollingView forKeyPath:@"contentSize" options:NSKeyValueObservingOptionNew context:nil];
         [self.infiniteScrollingView setScrollViewContentInsetForInfiniteScrolling];
+        self.infiniteScrollingView.isObserving = YES;
+      }
     }
 }
 
@@ -126,6 +134,19 @@ UIEdgeInsets scrollViewOriginalContentInsets;
     }
     
     return self;
+}
+
+- (void)willMoveToSuperview:(UIView *)newSuperview {
+    if (self.superview && newSuperview == nil) {
+        UIScrollView *scrollView = (UIScrollView *)self.superview;
+        if (scrollView.showsInfiniteScrolling) {
+          if (self.isObserving) {
+            [scrollView removeObserver:self forKeyPath:@"contentOffset"];
+            [scrollView removeObserver:self forKeyPath:@"contentSize"];
+            self.isObserving = NO;
+          }
+        }
+    }
 }
 
 - (void)layoutSubviews {
@@ -190,15 +211,6 @@ UIEdgeInsets scrollViewOriginalContentInsets;
         [self addSubview:_activityIndicatorView];
     }
     return _activityIndicatorView;
-}
-
-- (UIScrollView *)scrollView {
-    _scrollView = (UIScrollView*)self.superview;
-    
-    while(![_scrollView isKindOfClass:[UIScrollView class]])
-        _scrollView = (UIScrollView*)_scrollView.superview;
-    
-    return _scrollView;
 }
 
 - (UIActivityIndicatorViewStyle)activityIndicatorViewStyle {

@@ -34,12 +34,13 @@ static CGFloat const SVPullToRefreshViewHeight = 60;
 @property (nonatomic, strong) NSMutableArray *subtitles;
 @property (nonatomic, strong) NSMutableArray *viewForState;
 
-@property (nonatomic, strong, readonly) UIScrollView *scrollView;
+@property (nonatomic, weak) UIScrollView *scrollView;
 @property (nonatomic, readwrite) CGFloat originalTopInset;
 
 @property (nonatomic, assign) BOOL wasTriggeredByUser;
 @property (nonatomic, assign) BOOL showsPullToRefresh;
 @property (nonatomic, assign) BOOL showsDateLabel;
+@property(nonatomic, assign) BOOL isObserving;
 
 - (void)resetScrollViewContentInset;
 - (void)setScrollViewContentInsetForLoading;
@@ -64,6 +65,7 @@ static char UIScrollViewPullToRefreshView;
     if(!self.pullToRefreshView) {
         SVPullToRefreshView *view = [[SVPullToRefreshView alloc] initWithFrame:CGRectMake(0, -SVPullToRefreshViewHeight, self.bounds.size.width, SVPullToRefreshViewHeight)];
         view.pullToRefreshActionHandler = actionHandler;
+        view.scrollView = self;
         [self addSubview:view];
         
         view.originalTopInset = self.contentInset.top;
@@ -93,13 +95,19 @@ static char UIScrollViewPullToRefreshView;
     self.pullToRefreshView.hidden = !showsPullToRefresh;
     
     if(!showsPullToRefresh) {
+      if (self.pullToRefreshView.isObserving) {
         [self removeObserver:self.pullToRefreshView forKeyPath:@"contentOffset"];
         [self removeObserver:self.pullToRefreshView forKeyPath:@"frame"];
         [self.pullToRefreshView resetScrollViewContentInset];
+        self.pullToRefreshView.isObserving = NO;
+      }
     }
     else {
+      if (!self.pullToRefreshView.isObserving) {
         [self addObserver:self.pullToRefreshView forKeyPath:@"contentOffset" options:NSKeyValueObservingOptionNew context:nil];
         [self addObserver:self.pullToRefreshView forKeyPath:@"frame" options:NSKeyValueObservingOptionNew context:nil];
+        self.pullToRefreshView.isObserving = YES;
+      }
     }
 }
 
@@ -160,6 +168,21 @@ static NSBundle *_localizationBundle = nil;
     }
 
     return self;
+}
+
+- (void)willMoveToSuperview:(UIView *)newSuperview { 
+    if (self.superview && newSuperview == nil) {
+        //use self.superview, not self.scrollView. Why self.scrollView == nil here?
+        UIScrollView *scrollView = (UIScrollView *)self.superview;
+        if (scrollView.showsPullToRefresh) {
+          if (self.isObserving) {
+            //If enter this branch, it is the moment just before "SVPullToRefreshView's dealloc", so remove observer here
+            [scrollView removeObserver:self forKeyPath:@"contentOffset"];
+            [scrollView removeObserver:self forKeyPath:@"frame"];
+            self.isObserving = NO;
+          }
+        }
+    }
 }
 
 - (void)layoutSubviews {
@@ -322,15 +345,6 @@ static NSBundle *_localizationBundle = nil;
     return self.showsDateLabel ? self.subtitleLabel : nil;
 }
 
-- (UIScrollView *)scrollView {
-    _scrollView = (UIScrollView*)self.superview;
-    
-    while(![_scrollView isKindOfClass:[UIScrollView class]])
-        _scrollView = (UIScrollView*)_scrollView.superview;
-    
-    return _scrollView;
-}
-
 - (NSDateFormatter *)dateFormatter {
     if(!dateFormatter) {
         dateFormatter = [[NSDateFormatter alloc] init];
@@ -426,7 +440,7 @@ static NSBundle *_localizationBundle = nil;
 
 - (void)startAnimating{
     if(self.scrollView.contentOffset.y == 0) {
-        [self.scrollView setContentOffset:CGPointMake(0, -self.frame.size.height) animated:YES];
+        [self.scrollView setContentOffset:CGPointMake(self.scrollView.contentOffset.x, -self.frame.size.height) animated:YES];
         self.wasTriggeredByUser = NO;
     }
     else
@@ -439,7 +453,7 @@ static NSBundle *_localizationBundle = nil;
     self.state = SVPullToRefreshStateStopped;
     
     if(!self.wasTriggeredByUser)
-        [self.scrollView setContentOffset:CGPointMake(0, 0) animated:YES];
+        [self.scrollView setContentOffset:CGPointMake(self.scrollView.contentOffset.x, 0) animated:YES];
 }
 
 - (void)setState:(SVPullToRefreshState)newState {
