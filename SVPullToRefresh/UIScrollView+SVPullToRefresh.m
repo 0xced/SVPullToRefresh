@@ -103,7 +103,7 @@ static char UIScrollViewPullToRefreshView;
       }
     }
     else {
-      if (!self.pullToRefreshView.isObserving) {
+      if (self.pullToRefreshView && !self.pullToRefreshView.isObserving) {
         [self addObserver:self.pullToRefreshView forKeyPath:@"contentOffset" options:NSKeyValueObservingOptionNew context:nil];
         [self addObserver:self.pullToRefreshView forKeyPath:@"frame" options:NSKeyValueObservingOptionNew context:nil];
         self.pullToRefreshView.isObserving = YES;
